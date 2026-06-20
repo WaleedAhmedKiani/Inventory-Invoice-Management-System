@@ -1,0 +1,200 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+// ENUMS
+
+
+enum Role {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+}
+
+enum InvoiceStatus {
+  PAID
+  PENDING
+  CANCELLED
+}
+
+
+// ORGANIZATION
+
+
+model Organization {
+  id            String   @id @default(uuid())
+  name          String
+  plan          String   @default("FREE")
+  stripeCustomerId String?
+  createdAt     DateTime @default(now())
+
+  users         User[]
+  products      Product[]
+  customers     Customer[]
+  invoices      Invoice[]
+  subscription  Subscription?
+
+  // future
+  auditLogs     AuditLog[]
+}
+
+
+// USER
+
+
+model User {
+  id              String   @id @default(uuid())
+  name            String
+  email           String   @unique
+  password        String
+  role            Role     @default(STAFF)
+
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt       DateTime @default(now())
+
+  // relations
+  auditLogs       AuditLog[]
+}
+
+
+// SUBSCRIPTION (STRIPE)
+
+
+model Subscription {
+  id                    String   @id @default(uuid())
+  organizationId        String   @unique
+  organization          Organization @relation(fields: [organizationId], references: [id])
+
+  plan                  SubscriptionPlan @default(FREE)
+  status                SubscriptionStatus @default(ACTIVE)
+
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
+
+  currentPeriodEnd      DateTime?
+
+  createdAt             DateTime @default(now())
+}
+
+
+// PRODUCT
+
+
+model Product {
+  id              String   @id @default(uuid())
+  name            String
+  price           Float
+  stock           Int
+
+  sku             String?
+  barcode         String?
+  imageUrl        String?
+
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt       DateTime @default(now())
+
+  invoiceItems    InvoiceItem[]
+  isDeleted       Boolean @default(false)
+}
+
+
+// CUSTOMER
+
+
+model Customer {
+  id              String   @id @default(uuid())
+  name            String
+  email           String?
+  phone           String?
+  address         String?
+
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  invoices        Invoice[]
+
+  createdAt       DateTime @default(now())
+}
+
+// INVOICE
+
+
+model Invoice {
+  id              String   @id @default(uuid())
+
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id])
+
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  status          InvoiceStatus @default(PENDING)
+
+  subtotal        Float
+  tax             Float?
+  discount        Float?
+  total           Float
+
+  items           InvoiceItem[]
+
+  createdAt       DateTime @default(now())
+}
+
+
+// INVOICE ITEMS
+
+
+model InvoiceItem {
+  id          String  @id @default(uuid())
+
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id])
+
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+
+  quantity    Int
+  price       Float
+}
+
+
+// AUDIT LOG (ADVANCED)
+
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  action          String
+  entity          String
+  entityId        String?
+
+  userId          String
+  user            User @relation(fields: [userId], references: [id])
+
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt       DateTime @default(now())
+}
+
+
