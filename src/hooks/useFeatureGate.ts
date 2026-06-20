@@ -5,13 +5,14 @@ export const useFeatureGate = () => {
   const planData = usePlan();
 
   const organization = planData?.organization;
+  const plan = organization?.plan as any;
 
   return {
-    isPro: isProPlan(organization?.plan),
+    isPro: isProPlan(plan),
 
     isLocked: (feature: "products" | "customers" | "invoices") =>
       isFeatureLocked(
-        organization?.plan,
+        plan,
         organization?.usage,
         organization?.limits,
         feature
