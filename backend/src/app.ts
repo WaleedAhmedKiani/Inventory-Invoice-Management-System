@@ -1,7 +1,9 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
+
+// Route imports (preserving your exact ES Module paths)
 import authRoutes from "./modules/auth/auth.routes.js";
 import productRoutes from "./modules/products/product.routes.js";
 import customerRoutes from "./modules/customers/customer.routes.js";
@@ -16,53 +18,63 @@ import InvoiceAlertRoutes from "./modules/alerts/invoiceAlert.routes.js";
 import CustomerAlertRoutes from "./modules/alerts/customerAlert.routes.js";
 import subscriptionAlertRoutes from "./modules/alerts/subscriptionAlert.routes.js";
 import auditRoutes from "./modules/audit/audit.routes.js";
+
+// Middlewares and utilities
 import { stripeWebhook } from "./modules/stripe/webhook.controller.js";
 import { globalLimiter, loginLimiter } from "./middlewares/rateLimit.js";
 import { httpLogger } from "./utils/logger.js";
 
-
-
-
 const app = express();
-app.use(httpLogger); // ^Logging middleware (pino-http)
 
-app.set("trust proxy", 1); // ^trust first proxy
+// HTTP Request Logger
+app.use(httpLogger);
+
+// Trust first proxy (necessary for rate limiting on Render/Vercel)
+app.set("trust proxy", 1);
 app.use(cookieParser());
 
+// CORS configuration supporting both production and local environment variables
 const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
-
 app.use(cors({
-  origin: allowedOrigin,
-  credentials: true
+    origin: allowedOrigin,
+    credentials: true
 }));
 
+// Stripe Webhook Endpoint (MUST use raw parser verification with explicit types)
 app.post(
-  "/api/webhook",
-  express.raw({ 
-    type: "application/json",
-    verify: (req: any, res, buf) => {
-      req.rawBody = buf; // Force assign the exact raw buffer to req.rawBody
-    }
-  }),
-  stripeWebhook
+    "/api/webhook",
+    express.raw({ 
+        type: "application/json",
+        verify: (req: Request, res: Response, buf: Buffer) => {
+            // Safely assign the raw body buffer to satisfy Stripe verification
+            (req as any).rawBody = buf;
+        }
+    }),
+    stripeWebhook
 );
 
+// Standard JSON parser registered AFTER Stripe webhook
 app.use(express.json());
 app.use(helmet());
 
-app.use("/api", process.env.NODE_ENV === "development" ? (req, res, next) => next() : globalLimiter); // ^rate limiter
+// Global Rate Limiter applied only in production with explicit middleware types
+app.use(
+    "/api", 
+    process.env.NODE_ENV === "development" 
+        ? (req: Request, res: Response, next: NextFunction) => next() 
+        : globalLimiter
+);
 
-
-//  Auth Routes Logic with Conditional loginLimiter
+// Auth Routes with conditional Rate Limiter based on Environment
 if (process.env.NODE_ENV === "development") {
-  console.log(" Dev Mode: Skipping login rate limiter");
-  app.use("/api/auth", authRoutes); 
+    console.log("Dev Mode: Skipping login rate limiter");
+    app.use("/api/auth", authRoutes); 
 } else {
-  // Production: Apply loginLimiter ONLY to the auth routes
-  app.use("/api/auth", loginLimiter, authRoutes);
+    // Production: Apply login rate limits
+    app.use("/api/auth", loginLimiter, authRoutes);
 }
 
-//  API Routes Logic
+// Application API Routes
 app.use("/api/products", productRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/invoices", invoiceRoutes);
@@ -77,11 +89,9 @@ app.use("/api/alerts", InvoiceAlertRoutes);
 app.use("/api/alerts", CustomerAlertRoutes);
 app.use("/api/audit-logs", auditRoutes);
 
-
-
-// health check
-app.get("/", (req, res) => {
-  res.send("API is running...");
+// Server Root Health Check
+app.get("/", (req: Request, res: Response) => {
+    res.send("API is running...");
 });
 
 export default app;
