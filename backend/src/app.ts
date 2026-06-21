@@ -26,8 +26,13 @@ import { httpLogger } from "./utils/logger.js";
 
 const app = express();
 
-// HTTP Request Logger
+// HTTP Request Loggerclear
 app.use(httpLogger);
+
+
+app.get('/ping', (req: Request, res: Response) => {
+res.status(200).send('OK');
+});
 
 // Trust first proxy (necessary for rate limiting on Render/Vercel)
 app.set("trust proxy", 1);
